@@ -1,12 +1,11 @@
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::net;
 use std::io::Read;
 
 fn main() {
     let listener = Arc::new(Mutex::new(net::TcpListener::bind("127.0.0.1:10042").unwrap()));
-    let counter = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::new((Mutex::new(0), Condvar::new()));
     let mut threads: Vec<_> = Vec::with_capacity(10000);
     for _ in 0..10000 {
         let listener = listener.clone();
@@ -17,10 +16,20 @@ fn main() {
             stream.read_to_string(&mut string).unwrap();
             println!("{}", string);
 
-            counter.fetch_add(1, Ordering::Relaxed);
+            let &(ref lock, ref condvar) = &*counter;
+            let mut value = lock.lock().unwrap();
+            *value += 1;
+            if *value == 10000 {
+                condvar.notify_one();
+            }
         });
         threads.push(t);
     }
-    std::thread::sleep(std::time::Duration::new(10, 0));
-    println!("{:?}", counter);
+    let &(ref lock, ref condvar) = &*counter;
+    let mut value = lock.lock().unwrap();
+    while *value != 10000 {
+        value = condvar.wait(value).unwrap();
+    }
+    let n: usize = *value;
+    println!("{:?}", n);
 }
