@@ -19,6 +19,8 @@ fn main() {
             let response = b"OK";
             stream.write_all(response).unwrap();
 
+            stream.shutdown(std::net::Shutdown::Both).unwrap();
+
             let &(ref lock, ref condvar) = &*counter;
             let mut value = lock.lock().unwrap();
             println!("{}: {}", i, *value);
@@ -26,7 +28,6 @@ fn main() {
             if *value == THREADS_NUM {
                 condvar.notify_one();
             }
-            stream.shutdown(std::net::Shutdown::Both).unwrap();
         });
         threads.push(t);
     }
